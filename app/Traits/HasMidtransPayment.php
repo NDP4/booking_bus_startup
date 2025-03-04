@@ -2,60 +2,31 @@
 
 namespace App\Traits;
 
-use Illuminate\Support\Carbon;
-use Illuminate\Support\Facades\Log;
-use Midtrans\Config;
-use Midtrans\Snap;
+use App\Services\MidtransService;
 
 trait HasMidtransPayment
 {
-    public function createMidtransPayment(): bool
+    public function createMidtransPayment()
     {
-        // Set Midtrans configuration
-        Config::$serverKey = config('midtrans.server_key');
-        Config::$isProduction = config('midtrans.is_production');
-        Config::$isSanitized = true;
-        Config::$is3ds = true;
-
-        // Check if snap token is still valid (less than 24 hours old)
-        if ($this->snap_token && $this->snap_token_created_at?->diffInHours(now()) < 24) {
+        // If payment is pending and has snap token, reuse it
+        if ($this->canRetryPayment()) {
             return true;
         }
 
-        // Load relationships
-        $this->load(['customer', 'bus']);
+        // Otherwise create new payment
+        $midtransService = new MidtransService();
+        $result = $midtransService->createTransaction($this);
 
-        $params = [
-            'transaction_details' => [
-                'order_id' => 'BOOKING-' . $this->id,
-                'gross_amount' => (int) $this->total_amount,
-            ],
-            'customer_details' => [
-                'first_name' => $this->customer->name,
-                'email' => $this->customer->email,
-                'phone' => $this->customer->phone,
-            ],
-            'item_details' => [
-                [
-                    'id' => $this->bus_id,
-                    'price' => (int) $this->total_amount,
-                    'quantity' => 1,
-                    'name' => "Bus Booking - {$this->bus->name}",
-                ],
-            ],
-        ];
-
-        try {
-            $snapToken = Snap::getSnapToken($params);
+        if ($result['success']) {
             $this->update([
-                'snap_token' => $snapToken,
-                'snap_token_created_at' => now(),
+                'snap_token' => $result['token'],
+                'order_id' => $result['order_id'],
+                'payment_status' => 'pending'
             ]);
             return true;
-        } catch (\Exception $e) {
-            Log::error('Midtrans Error: ' . $e->getMessage());
-            return false;
         }
+
+        throw new \Exception($result['message']);
     }
 
     public function handlePaymentNotification(array $notification): void

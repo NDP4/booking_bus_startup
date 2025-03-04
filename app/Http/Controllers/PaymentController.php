@@ -10,7 +10,7 @@ class PaymentController extends Controller
 {
     public function checkout(Booking $booking)
     {
-        // Check if user is authorized using the raw customer_id
+        // Authorization check
         if (
             !Auth::check() ||
             (Auth::user()->role !== 'admin' &&
@@ -19,17 +19,22 @@ class PaymentController extends Controller
             abort(403, 'Unauthorized access');
         }
 
-        // Load relationships for the view after authorization
+        // Load relationships for the view
         $booking->load(['customer', 'bus']);
 
-        if (empty($booking->snap_token)) {
-            try {
+        try {
+            // Only create new payment if no valid snap token exists
+            if (empty($booking->snap_token)) {
                 $booking->createMidtransPayment();
                 $booking->refresh();
-            } catch (\Exception $e) {
-                return redirect()->back()
-                    ->with('error', 'Gagal membuat pembayaran: ' . $e->getMessage());
             }
+
+            if (empty($booking->snap_token)) {
+                throw new \Exception('Failed to get payment token');
+            }
+        } catch (\Exception $e) {
+            return redirect()->route('filament.panel.resources.bookings.index')
+                ->with('error', 'Gagal memproses pembayaran: ' . $e->getMessage());
         }
 
         return view('payment.checkout', compact('booking'));

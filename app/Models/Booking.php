@@ -26,6 +26,7 @@ class Booking extends Model
         'total_amount',
         'payment_status', // enum: pending, paid, failed
         'payment_token',
+        'snap_token', // Add this line
         'special_requests',
     ];
 
@@ -58,5 +59,16 @@ class Booking extends Model
     public function crewAssignments(): HasMany
     {
         return $this->hasMany(CrewAssignment::class);
+    }
+
+    public function isPending(): bool
+    {
+        return $this->payment_status === 'pending';
+    }
+
+    public function canRetryPayment(): bool
+    {
+        return in_array($this->payment_status, ['pending', 'failed'])
+            && !empty($this->snap_token);
     }
 }

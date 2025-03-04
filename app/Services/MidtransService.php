@@ -28,9 +28,12 @@ class MidtransService
         $customer = $booking->getRelation('customer');
         $bus = $booking->getRelation('bus');
 
+        // Generate unique order ID with timestamp
+        $uniqueOrderId = sprintf('BOOKING-%d-%s', $booking->getKey(), time());
+
         $params = [
             'transaction_details' => [
-                'order_id' => 'BOOKING-' . $booking->getKey(),
+                'order_id' => $uniqueOrderId,
                 'gross_amount' => (int) $booking->getAttribute('total_amount'),
             ],
             'customer_details' => [
@@ -53,6 +56,7 @@ class MidtransService
             return [
                 'success' => true,
                 'token' => $snapToken,
+                'order_id' => $uniqueOrderId,
                 'message' => 'Success generate snap token',
             ];
         } catch (\Exception $e) {
