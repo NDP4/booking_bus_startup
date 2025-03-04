@@ -3,18 +3,20 @@
 namespace App\Services;
 
 use App\Models\Booking;
-use Midtrans\Config;
+use Illuminate\Support\Facades\Config;
+use Midtrans\Config as MidtransConfig;
 use Midtrans\Snap;
 
 class MidtransService
 {
     public function __construct()
     {
-        Config::$serverKey = config('midtrans.server_key');
-        Config::$clientKey = config('midtrans.client_key');
-        Config::$isProduction = config('midtrans.is_production');
-        Config::$isSanitized = config('midtrans.is_sanitized');
-        Config::$is3ds = config('midtrans.is_3ds');
+        // Set Midtrans configuration
+        MidtransConfig::$serverKey = Config::get('midtrans.server_key');
+        MidtransConfig::$clientKey = Config::get('midtrans.client_key');
+        MidtransConfig::$isProduction = Config::get('midtrans.is_production', false);
+        MidtransConfig::$isSanitized = true;
+        MidtransConfig::$is3ds = true;
     }
 
     public function createTransaction(Booking $booking)

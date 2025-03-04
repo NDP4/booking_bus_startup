@@ -7,10 +7,11 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
+use App\Traits\HasMidtransPayment;
 
 class Booking extends Model
 {
-    use HasFactory;
+    use HasFactory, HasMidtransPayment;
 
     protected $fillable = [
         'customer_id',
@@ -25,6 +26,8 @@ class Booking extends Model
         'total_amount',
         'payment_status', // enum: pending, paid, failed
         'payment_token',
+        'snap_token',
+        'snap_token_created_at',
         'special_requests',
     ];
 
@@ -32,6 +35,7 @@ class Booking extends Model
         'booking_date' => 'datetime',
         'return_date' => 'datetime',
         'total_amount' => 'decimal:2',
+        'snap_token_created_at' => 'datetime',
     ];
 
     public function customer(): BelongsTo

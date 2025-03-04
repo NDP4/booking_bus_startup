@@ -36,7 +36,7 @@ class User extends Authenticatable implements FilamentUser, JWTSubject
 
     public function canAccessPanel(Panel $panel): bool
     {
-        return in_array($this->role, ['admin', 'crew']);
+        return in_array($this->role, ['admin', 'crew', 'customer']);
     }
 
     public function bookings(): HasMany

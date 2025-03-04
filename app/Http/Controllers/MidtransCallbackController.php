@@ -3,75 +3,66 @@
 namespace App\Http\Controllers;
 
 use App\Models\Booking;
-use App\Models\Payment;
 use Illuminate\Http\Request;
-use Midtrans\Notification;
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Log;
 
 class MidtransCallbackController extends Controller
 {
     public function handle(Request $request)
     {
+        $notification = $request->all();
+        Log::info('Midtrans notification received:', $notification);
+
         try {
-            $notification = new Notification();
+            $orderId = $notification['order_id'];
+            $transactionStatus = $notification['transaction_status'];
+            $fraudStatus = $notification['fraud_status'];
+            $bookingId = str_replace('BOOKING-', '', $orderId);
 
-            $orderId = explode('-', $notification->order_id)[1];
-            $booking = Booking::findOrFail($orderId);
-
-            $transactionStatus = $notification->transaction_status;
-            $type = $notification->payment_type;
-            $fraudStatus = $notification->fraud_status;
-
-            $payment = Payment::create([
-                'booking_id' => $booking->id,
-                'payment_id' => $notification->transaction_id,
-                'amount' => $notification->gross_amount,
-                'payment_type' => $type,
-                'status' => $this->mapPaymentStatus($transactionStatus),
-                'payment_details' => json_encode($notification),
-                'paid_at' => now(),
-            ]);
+            $booking = Booking::find($bookingId);
+            if (!$booking) {
+                return response()->json(['message' => 'Booking not found'], 404);
+            }
 
             if ($transactionStatus == 'capture') {
                 if ($fraudStatus == 'challenge') {
-                    $booking->payment_status = 'pending';
+                    $booking->update([
+                        'payment_status' => 'pending',
+                        'status' => 'pending',
+                        'updated_at' => Carbon::now(),
+                    ]);
                 } else if ($fraudStatus == 'accept') {
-                    $booking->payment_status = 'paid';
-                    $booking->status = 'confirmed';
+                    $booking->update([
+                        'payment_status' => 'paid',
+                        'status' => 'confirmed',
+                        'updated_at' => Carbon::now(),
+                    ]);
                 }
             } else if ($transactionStatus == 'settlement') {
-                $booking->payment_status = 'paid';
-                $booking->status = 'confirmed';
+                $booking->update([
+                    'payment_status' => 'paid',
+                    'status' => 'confirmed',
+                    'updated_at' => Carbon::now(),
+                ]);
             } else if ($transactionStatus == 'cancel' || $transactionStatus == 'deny' || $transactionStatus == 'expire') {
-                $booking->payment_status = 'failed';
+                $booking->update([
+                    'payment_status' => 'failed',
+                    'status' => 'cancelled',
+                    'updated_at' => Carbon::now(),
+                ]);
             } else if ($transactionStatus == 'pending') {
-                $booking->payment_status = 'pending';
+                $booking->update([
+                    'payment_status' => 'pending',
+                    'status' => 'pending',
+                    'updated_at' => Carbon::now(),
+                ]);
             }
 
-            $booking->save();
-
-            return response()->json([
-                'status' => 'success',
-                'message' => 'Payment notification handled successfully'
-            ]);
+            return response()->json(['message' => 'Notification processed']);
         } catch (\Exception $e) {
-            return response()->json([
-                'status' => 'error',
-                'message' => $e->getMessage()
-            ], 500);
+            Log::error('Midtrans callback error: ' . $e->getMessage());
+            return response()->json(['message' => 'Error processing notification'], 500);
         }
-    }
-
-    private function mapPaymentStatus($status)
-    {
-        $statusMap = [
-            'capture' => 'success',
-            'settlement' => 'success',
-            'pending' => 'pending',
-            'deny' => 'failed',
-            'expire' => 'failed',
-            'cancel' => 'failed'
-        ];
-
-        return $statusMap[$status] ?? 'pending';
     }
 }
