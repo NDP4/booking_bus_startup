@@ -50,10 +50,12 @@ class BookingResource extends Resource
                             ->relationship('bus', 'name', fn($query) =>
                             $query->where('status', 'available'))
                             ->required()
+                            ->disabled()  // Disable the select field
+                            ->dehydrated() // Keep the value when form is submitted
                             ->searchable()
-                            ->live()
                             ->preload()
-                            ->label('Pilih Bus')
+                            ->label('Bus yang Dipilih')
+                            ->helperText('Bus akan terpilih otomatis saat Anda memilih bus di atas')
                             ->afterStateUpdated(fn($state, $get, $set) =>
                             static::calculateTotalFromState($get, $set))
                     ]),
@@ -123,39 +125,39 @@ class BookingResource extends Resource
                         Hidden::make('payment_status')
                             ->default('pending'),
 
-                        Forms\Components\TextInput::make('payment_token')
-                            ->maxLength(255),
+                        // Forms\Components\TextInput::make('payment_token')
+                        //     ->maxLength(255),
                         Forms\Components\Textarea::make('special_requests')
                             ->maxLength(65535)
                             ->columnSpanFull(),
-                        Forms\Components\Actions::make([
-                            Forms\Components\Actions\Action::make('calculate')
-                                ->label('Hitung Total')
-                                ->action(function ($livewire) {
-                                    $formData = $livewire->form->getRawState();
+                        // Forms\Components\Actions::make([
+                        //     Forms\Components\Actions\Action::make('calculate')
+                        //         ->label('Hitung Total')
+                        //         ->action(function ($livewire) {
+                        //             $formData = $livewire->form->getRawState();
 
-                                    $bus = Bus::find($formData['bus_id']);
-                                    if (!$bus) return;
+                        //             $bus = Bus::find($formData['bus_id']);
+                        //             if (!$bus) return;
 
-                                    $days = 1;
-                                    if (!empty($formData['return_date'])) {
-                                        $start = Carbon::parse($formData['booking_date']);
-                                        $end = Carbon::parse($formData['return_date']);
-                                        $days = $start->diffInDays($end) + 1;
-                                    }
+                        //             $days = 1;
+                        //             if (!empty($formData['return_date'])) {
+                        //                 $start = Carbon::parse($formData['booking_date']);
+                        //                 $end = Carbon::parse($formData['return_date']);
+                        //                 $days = $start->diffInDays($end) + 1;
+                        //             }
 
-                                    $distance = 0; // Todo: implement distance calculation
+                        //             $distance = 0; // Todo: implement distance calculation
 
-                                    $total = $bus->calculateTotalPrice(
-                                        $formData['total_seats'],
-                                        $formData['seat_type'],
-                                        $days,
-                                        $distance
-                                    );
+                        //             $total = $bus->calculateTotalPrice(
+                        //                 $formData['total_seats'],
+                        //                 $formData['seat_type'],
+                        //                 $days,
+                        //                 $distance
+                        //             );
 
-                                    $livewire->form->fill(['total_amount' => $total]);
-                                }),
-                        ])->columnSpanFull(),
+                        //             $livewire->form->fill(['total_amount' => $total]);
+                        //         }),
+                        // ])->columnSpanFull(),
                     ])->columnSpanFull(),
             ])
         ]);

@@ -32,7 +32,12 @@ class User extends Authenticatable implements FilamentUser, JWTSubject
     protected $casts = [
         'email_verified_at' => 'datetime',
         'password' => 'hashed',
+        'role' => 'string',
     ];
+
+    const ROLE_ADMIN = 'admin';
+    const ROLE_CUSTOMER = 'customer';
+    const ROLE_CREW = 'crew';
 
     public function canAccessPanel(Panel $panel): bool
     {
@@ -46,12 +51,17 @@ class User extends Authenticatable implements FilamentUser, JWTSubject
 
     public function reviews(): HasMany
     {
-        return $this->hasMany(Review::class);
+        return $this->hasMany(Review::class, 'customer_id');
     }
 
     public function crewAssignments(): HasMany
     {
         return $this->hasMany(CrewAssignment::class, 'crew_id');
+    }
+
+    public function getRoleAttribute(): string
+    {
+        return $this->attributes['role'] ?? 'customer';
     }
 
     // JWT methods

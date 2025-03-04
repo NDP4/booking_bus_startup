@@ -10,100 +10,183 @@ use Filament\Forms\Form;
 use Filament\Resources\Resource;
 use Filament\Tables;
 use Filament\Tables\Table;
+use Illuminate\Support\Facades\Auth;
+use Filament\Tables\Columns\Layout\Split;
+use Filament\Tables\Columns\Layout\Stack;
 
 class CrewAssignmentResource extends Resource
 {
     protected static ?string $model = CrewAssignment::class;
     protected static ?string $navigationIcon = 'heroicon-o-user-group';
-    protected static ?string $navigationGroup = 'Booking Management';
+    protected static ?string $navigationGroup = 'Crew Management';
     protected static ?int $navigationSort = 2;
+    protected static ?string $modelLabel = 'Penugasan Crew';
 
     public static function form(Form $form): Form
     {
         return $form->schema([
-            Forms\Components\Section::make()
+            Forms\Components\Section::make('Detail Penugasan')
                 ->schema([
-                    Forms\Components\Select::make('crew_id')
-                        ->label('Crew Member')
-                        ->options(User::where('role', 'crew')->pluck('name', 'id'))
-                        ->required()
-                        ->searchable(),
                     Forms\Components\Select::make('booking_id')
                         ->relationship('booking', 'id')
                         ->required()
                         ->searchable()
-                        ->preload()
-                        ->getOptionLabelFromRecordUsing(
-                            fn($record) =>
-                            "Booking #{$record->id} - {$record->customer->name} - {$record->booking_date->format('d M Y')}"
-                        ),
+                        ->preload(),
+
+                    Forms\Components\Select::make('crew_id')
+                        ->relationship('crew', 'name', fn($query) =>
+                        $query->where('role', 'crew'))
+                        ->required()
+                        ->searchable()
+                        ->preload(),
+
                     Forms\Components\Select::make('status')
                         ->options([
-                            'assigned' => 'Assigned',
-                            'completed' => 'Completed',
-                            'cancelled' => 'Cancelled',
+                            'assigned' => 'Ditugaskan',
+                            'on_duty' => 'Sedang Bertugas',
+                            'completed' => 'Selesai',
                         ])
-                        ->required()
-                        ->default('assigned'),
+                        ->required(),
+
                     Forms\Components\Textarea::make('notes')
-                        ->maxLength(65535)
-                        ->columnSpanFull(),
-                ])->columns(2)
+                        ->label('Catatan')
+                        ->rows(3),
+                ]),
         ]);
     }
 
     public static function table(Table $table): Table
     {
+        $user = Auth::user();
+
+        $columns = match ($user->role) {
+            'admin' => self::getAdminColumns(),
+            'crew' => self::getCrewColumns(),
+            'customer' => self::getCustomerColumns(),
+            default => self::getDefaultColumns(),
+        };
+
         return $table
-            ->columns([
-                Tables\Columns\TextColumn::make('crew.name')
-                    ->label('Crew Member')
-                    ->searchable()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('booking.customer.name')
-                    ->label('Customer')
-                    ->searchable()
-                    ->sortable(),
-                Tables\Columns\TextColumn::make('booking.booking_date')
-                    ->label('Booking Date')
-                    ->dateTime()
-                    ->sortable(),
+            ->columns($columns)
+            ->defaultSort('created_at', 'desc')
+            ->filters([
+                Tables\Filters\SelectFilter::make('status')
+                    ->options([
+                        'assigned' => 'Ditugaskan',
+                        'on_duty' => 'Sedang Bertugas',
+                        'completed' => 'Selesai',
+                    ]),
+            ])
+            ->actions([
+                ...($user->role === 'admin' ? [
+                    Tables\Actions\EditAction::make(),
+                    Tables\Actions\DeleteAction::make(),
+                ] : []),
+            ]);
+    }
+
+    protected static function getAdminColumns(): array
+    {
+        return [
+            Split::make([
+                Stack::make([
+                    Tables\Columns\TextColumn::make('booking.id')
+                        ->label('Booking ID')
+                        ->searchable(),
+                    Tables\Columns\TextColumn::make('crew.name')
+                        ->label('Nama Crew')
+                        ->searchable(),
+                    Tables\Columns\TextColumn::make('status')
+                        ->badge()
+                        ->color(fn(string $state): string => match ($state) {
+                            'assigned' => 'warning',
+                            'on_duty' => 'info',
+                            'completed' => 'success',
+                            default => 'gray',
+                        }),
+                ]),
+                Stack::make([
+                    Tables\Columns\TextColumn::make('booking.customer.name')
+                        ->label('Customer'),
+                    Tables\Columns\TextColumn::make('booking.customer.phone')
+                        ->label('No. Telp Customer'),
+                    Tables\Columns\TextColumn::make('crew.phone')
+                        ->label('No. Telp Crew'),
+                ]),
+            ]),
+        ];
+    }
+
+    protected static function getCrewColumns(): array
+    {
+        return [
+            Stack::make([
                 Tables\Columns\TextColumn::make('booking.bus.name')
                     ->label('Bus')
-                    ->searchable(),
+                    ->formatStateUsing(fn($state, $record) =>
+                    "{$state} ({$record->booking->bus->number_plate})")
+                    ->size('lg')
+                    ->weight('bold'),
                 Tables\Columns\TextColumn::make('status')
                     ->badge()
                     ->color(fn(string $state): string => match ($state) {
                         'assigned' => 'warning',
+                        'on_duty' => 'info',
                         'completed' => 'success',
-                        'cancelled' => 'danger',
                         default => 'gray',
                     }),
-                Tables\Columns\TextColumn::make('created_at')
-                    ->dateTime()
-                    ->sortable()
-                    ->toggleable(isToggledHiddenByDefault: true),
-            ])
-            ->filters([
-                Tables\Filters\SelectFilter::make('status')
-                    ->options([
-                        'assigned' => 'Assigned',
-                        'completed' => 'Completed',
-                        'cancelled' => 'Cancelled',
-                    ]),
-                Tables\Filters\SelectFilter::make('crew_id')
-                    ->label('Crew Member')
-                    ->options(User::where('role', 'crew')->pluck('name', 'id')),
-            ])
-            ->actions([
-                Tables\Actions\EditAction::make(),
-                Tables\Actions\DeleteAction::make(),
-            ])
-            ->bulkActions([
-                Tables\Actions\BulkActionGroup::make([
-                    Tables\Actions\DeleteBulkAction::make(),
-                ]),
-            ]);
+                Tables\Columns\TextColumn::make('booking.booking_date')
+                    ->label('Tanggal Keberangkatan')
+                    ->dateTime('d M Y H:i'),
+                Tables\Columns\TextColumn::make('booking.return_date')
+                    ->label('Tanggal Kembali')
+                    ->dateTime('d M Y H:i'),
+                Tables\Columns\TextColumn::make('')
+                    ->label('Rute')
+                    ->formatStateUsing(fn($state, $record) =>
+                    "{$record->booking->pickup_location} → {$record->booking->destination}"),
+                Stack::make([
+                    Tables\Columns\TextColumn::make('booking.customer.name')
+                        ->label('Customer'),
+                    Tables\Columns\TextColumn::make('booking.customer.phone')
+                        ->label('Kontak'),
+                    Tables\Columns\TextColumn::make('notes')
+                        ->label('Catatan')
+                ])->space(1),
+            ])->space(3),
+        ];
+    }
+
+    protected static function getCustomerColumns(): array
+    {
+        return [
+            Stack::make([
+                Tables\Columns\TextColumn::make('crew.name')
+                    ->label('Nama Crew')
+                    ->formatStateUsing(fn($state) => "Crew: {$state}")
+                    ->size('lg')
+                    ->weight('bold'),
+                Tables\Columns\TextColumn::make('crew.phone')
+                    ->label('Kontak Crew')
+                    ->formatStateUsing(fn($state) => "No. Telp: {$state}"),
+                Tables\Columns\TextColumn::make('status')
+                    ->badge()
+                    ->label('Status Crew')
+                    ->color(fn(string $state): string => match ($state) {
+                        'assigned' => 'warning',
+                        'on_duty' => 'info',
+                        'completed' => 'success',
+                        default => 'gray',
+                    }),
+            ])->space(2),
+        ];
+    }
+
+    protected static function getDefaultColumns(): array
+    {
+        return [
+            Tables\Columns\TextColumn::make('id'),
+        ];
     }
 
     public static function getPages(): array
